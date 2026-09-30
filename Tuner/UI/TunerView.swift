@@ -193,47 +193,41 @@ struct TunerView: View {
         return Button {
             engine.selectString(nil)
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 Circle()
-                    .fill(isSelected ? Color.red : Color(white: 0.16))
-                    .frame(width: 7, height: 7)
-                    .overlay(Circle().stroke(.white.opacity(isSelected ? 0.65 : 0.08), lineWidth: 0.5))
-                    .shadow(color: .red.opacity(isSelected ? 0.85 : 0), radius: 7)
+                    .fill(isSelected ? Color.red : .white.opacity(0.16))
+                    .frame(width: 6, height: 6)
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(isSelected ? 0.72 : 0.12), lineWidth: 0.5)
+                    }
+                    .shadow(color: .red.opacity(isSelected ? 0.65 : 0), radius: 5)
 
                 Text("AUTO")
-                    .font(.system(size: 7, weight: .black, design: .rounded))
-                    .tracking(0.5)
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.34))
+                    .font(.system(size: 7, weight: .bold, design: .default))
+                    .tracking(0.7)
+                    .foregroundStyle(isSelected ? .white.opacity(0.92) : .white.opacity(0.38))
             }
-            .frame(width: 42, height: 34)
-            .background {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(white: 0.12), Color(white: 0.035)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .shadow(color: .black.opacity(0.9), radius: 2, y: 2)
-            }
+            .frame(width: 42, height: 38)
+            .tunerGlass(cornerRadius: 12)
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(
-                        isSelected ? Color.red.opacity(0.48) : .white.opacity(0.1),
-                        lineWidth: 0.75
+                        isSelected ? Color.red.opacity(0.2) : .white.opacity(0.06),
+                        lineWidth: 0.6
                     )
             }
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(.white.opacity(0.08), lineWidth: 0.5)
-                    .mask(alignment: .top) {
-                        Rectangle().frame(height: 12)
-                    }
+            .overlay(alignment: .bottom) {
+                Capsule()
+                    .fill(isSelected ? Color.red.opacity(0.55) : .clear)
+                    .frame(width: 15, height: 1.5)
+                    .padding(.bottom, 3)
             }
+            .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.2), value: isSelected)
+        .scaleEffect(isSelected ? 0.98 : 1)
+        .animation(.snappy(duration: 0.24), value: isSelected)
         .accessibilityLabel("Автоматический выбор струны")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
