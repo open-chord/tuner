@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TunerView: View {
     @StateObject private var engine = TunerEngine()
-    @State private var glowMoves = false
 
     private var isListening: Bool { engine.state == .listening }
     private var isInTune: Bool { abs(engine.cents) <= 5 && engine.frequency != nil }
@@ -25,44 +24,30 @@ struct TunerView: View {
             .padding(.bottom, 18)
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
-                glowMoves = true
-            }
-        }
     }
 
     private var background: some View {
         ZStack {
-            Color(red: 0.025, green: 0.03, blue: 0.045)
-
-            Circle()
-                .fill(Color.cyan.opacity(isListening ? 0.22 : 0.13))
-                .frame(width: 420, height: 420)
-                .blur(radius: 85)
-                .offset(x: glowMoves ? 180 : 110, y: glowMoves ? -300 : -250)
-
-            Circle()
-                .fill((isInTune ? Color.green : Color.indigo).opacity(0.2))
-                .frame(width: 360, height: 360)
-                .blur(radius: 95)
-                .offset(x: glowMoves ? -170 : -110, y: glowMoves ? 330 : 280)
-
             LinearGradient(
-                colors: [.clear, .black.opacity(0.42)],
-                startPoint: .top,
-                endPoint: .bottom
+                colors: [Color(white: 0.075), .black],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [.white.opacity(0.055), .clear],
+                center: .topTrailing,
+                startRadius: 0,
+                endRadius: 360
             )
         }
         .ignoresSafeArea()
-        .animation(.smooth(duration: 0.8), value: isListening)
-        .animation(.smooth(duration: 0.8), value: isInTune)
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            Label("Tuner", systemImage: "waveform")
-                .font(.headline.weight(.bold))
+            Label("Guitar Tuner", systemImage: "waveform")
+                .font(.headline.weight(.semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.white)
 
@@ -112,7 +97,7 @@ struct TunerView: View {
 
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(engine.guitarString?.name ?? "—")
-                        .font(.system(size: 116, weight: .semibold, design: .rounded))
+                        .font(.system(size: 128, weight: .light, design: .default))
                         .contentTransition(.numericText())
 
                     if let octave = engine.guitarString?.octave {
@@ -128,7 +113,7 @@ struct TunerView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(centsText)
-                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .font(.title3.weight(.semibold).monospacedDigit())
                     .contentTransition(.numericText())
                 Text("cents")
                     .font(.caption.weight(.semibold))
@@ -147,14 +132,18 @@ struct TunerView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 28)
-        .tunerGlass(cornerRadius: 38)
-        .overlay {
-            RoundedRectangle(cornerRadius: 38, style: .continuous)
-                .stroke(statusColor.opacity(isListening ? 0.28 : 0.08), lineWidth: 1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 20)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.white.opacity(0.09))
+                .frame(height: 0.5)
         }
-        .shadow(color: statusColor.opacity(isInTune ? 0.16 : 0.06), radius: 35, y: 16)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.white.opacity(0.09))
+                .frame(height: 0.5)
+        }
         .animation(.smooth, value: isInTune)
     }
 
@@ -203,20 +192,16 @@ struct TunerView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .foregroundStyle(isActive ? statusColor : .white.opacity(0.72))
-                .background(
-                    isActive ? statusColor.opacity(0.14) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(isActive ? statusColor.opacity(0.32) : .white.opacity(0.06))
+                .foregroundStyle(isActive ? statusColor : .white.opacity(0.46))
+                .overlay(alignment: .bottom) {
+                    Capsule()
+                        .fill(isActive ? statusColor : .clear)
+                        .frame(width: 20, height: 2)
                 }
                 .animation(.snappy, value: isActive)
             }
         }
-        .padding(8)
-        .tunerGlass(cornerRadius: 26)
+        .padding(.horizontal, 6)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Струны: \(engine.tuning.summary)")
     }
@@ -265,7 +250,7 @@ struct TunerView: View {
 
     private var statusColor: Color {
         if isInTune { return .green }
-        return isListening ? .cyan : .white
+        return .white
     }
 
     private func meterOffset(width: CGFloat) -> CGFloat {
