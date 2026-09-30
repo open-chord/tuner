@@ -177,43 +177,90 @@ struct TunerView: View {
 
     private var stringStrip: some View {
         HStack(spacing: 8) {
-            stringButton(title: "AUTO", string: nil)
+            autoModeButton
 
             ForEach(engine.tuning.strings) { string in
-                stringButton(title: string.name, string: string)
+                stringButton(string)
             }
         }
         .padding(.horizontal, 6)
         .sensoryFeedback(.selection, trigger: engine.selectedStringID)
     }
 
-    private func stringButton(title: String, string: GuitarString?) -> some View {
-        let isSelected = string?.id == engine.selectedStringID
-        let isDetected = engine.selectedStringID == nil && engine.guitarString?.id == string?.id
-        let isActive = isSelected || isDetected || (string == nil && engine.selectedStringID == nil)
+    private var autoModeButton: some View {
+        let isSelected = engine.selectedStringID == nil
+
+        return Button {
+            engine.selectString(nil)
+        } label: {
+            VStack(spacing: 3) {
+                Circle()
+                    .fill(isSelected ? Color.red : Color(white: 0.16))
+                    .frame(width: 7, height: 7)
+                    .overlay(Circle().stroke(.white.opacity(isSelected ? 0.65 : 0.08), lineWidth: 0.5))
+                    .shadow(color: .red.opacity(isSelected ? 0.85 : 0), radius: 7)
+
+                Text("AUTO")
+                    .font(.system(size: 7, weight: .black, design: .rounded))
+                    .tracking(0.5)
+                    .foregroundStyle(isSelected ? .white : .white.opacity(0.34))
+            }
+            .frame(width: 42, height: 34)
+            .background {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(white: 0.12), Color(white: 0.035)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.9), radius: 2, y: 2)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(
+                        isSelected ? Color.red.opacity(0.48) : .white.opacity(0.1),
+                        lineWidth: 0.75
+                    )
+            }
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(.white.opacity(0.08), lineWidth: 0.5)
+                    .mask(alignment: .top) {
+                        Rectangle().frame(height: 12)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.2), value: isSelected)
+        .accessibilityLabel("Автоматический выбор струны")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func stringButton(_ string: GuitarString) -> some View {
+        let isSelected = string.id == engine.selectedStringID
+        let isDetected = engine.selectedStringID == nil && engine.guitarString?.id == string.id
+        let isActive = isSelected || isDetected
 
         return Button {
             engine.selectString(string)
         } label: {
-            Text(title)
-                .font(
-                    string == nil
-                        ? .system(size: 8, weight: .bold)
-                        : .headline.weight(.semibold)
-                )
+            Text(string.name)
+                .font(.headline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 38)
                 .foregroundStyle(isActive ? statusColor : .white.opacity(0.4))
                 .overlay(alignment: .bottom) {
                     Capsule()
                         .fill(isActive ? statusColor : .clear)
-                        .frame(width: string == nil ? 24 : 18, height: 2)
+                        .frame(width: 18, height: 2)
                 }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .animation(.snappy, value: isActive)
-        .accessibilityLabel(string == nil ? "Автоматический выбор струны" : "Струна \(title)")
+        .accessibilityLabel("Струна \(string.name)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
