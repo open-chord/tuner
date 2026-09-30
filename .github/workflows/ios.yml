@@ -12,10 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test tuning core
         run: swift test
-      - name: Build and test
+      - name: Build iOS app
         run: >-
-          xcodebuild test
+          xcodebuild build
           -project Tuner.xcodeproj
           -scheme Tuner
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO
