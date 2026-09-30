@@ -177,25 +177,44 @@ struct TunerView: View {
 
     private var stringStrip: some View {
         HStack(spacing: 8) {
-            ForEach(engine.tuning.strings) { string in
-                let isActive = engine.guitarString?.id == string.id
+            stringButton(title: "AUTO", string: nil)
 
-                Text(string.name)
-                    .font(.headline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
-                .foregroundStyle(isActive ? statusColor : .white.opacity(0.46))
-                .overlay(alignment: .bottom) {
-                    Capsule()
-                        .fill(isActive ? statusColor : .clear)
-                        .frame(width: 20, height: 2)
-                }
-                .animation(.snappy, value: isActive)
+            ForEach(engine.tuning.strings) { string in
+                stringButton(title: string.name, string: string)
             }
         }
         .padding(.horizontal, 6)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Струны: \(engine.tuning.summary)")
+        .sensoryFeedback(.selection, trigger: engine.selectedStringID)
+    }
+
+    private func stringButton(title: String, string: GuitarString?) -> some View {
+        let isSelected = string?.id == engine.selectedStringID
+        let isDetected = engine.selectedStringID == nil && engine.guitarString?.id == string?.id
+        let isActive = isSelected || isDetected || (string == nil && engine.selectedStringID == nil)
+
+        return Button {
+            engine.selectString(string)
+        } label: {
+            Text(title)
+                .font(
+                    string == nil
+                        ? .system(size: 8, weight: .bold)
+                        : .headline.weight(.semibold)
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .foregroundStyle(isActive ? statusColor : .white.opacity(0.4))
+                .overlay(alignment: .bottom) {
+                    Capsule()
+                        .fill(isActive ? statusColor : .clear)
+                        .frame(width: string == nil ? 24 : 18, height: 2)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .animation(.snappy, value: isActive)
+        .accessibilityLabel(string == nil ? "Автоматический выбор струны" : "Струна \(title)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var primaryAction: some View {
@@ -223,6 +242,10 @@ struct TunerView: View {
 
     private var statusText: String {
         guard engine.frequency != nil else {
+            if let selectedStringID = engine.selectedStringID,
+               let string = engine.tuning.strings.first(where: { $0.id == selectedStringID }) {
+                return isListening ? "Сыграй струну \(string.name)" : "Выбрана струна \(string.name)"
+            }
             return isListening ? "Сыграй открытую струну" : "Готов к настройке"
         }
         if isInTune { return "Настроено" }

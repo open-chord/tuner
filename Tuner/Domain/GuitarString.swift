@@ -29,6 +29,14 @@ struct TuningPreset: Equatable, Hashable, Identifiable, Sendable {
         }
     }
 
+    func targetString(for frequency: Double, selectedStringID: String?) -> GuitarString? {
+        if let selectedStringID,
+           let selectedString = strings.first(where: { $0.id == selectedStringID }) {
+            return selectedString
+        }
+        return nearestString(to: frequency)
+    }
+
     static let standard = TuningPreset(
         id: "standard",
         name: "Standard",
