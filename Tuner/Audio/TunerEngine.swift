@@ -26,7 +26,7 @@ final class TunerEngine: ObservableObject {
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: [.allowBluetoothHFP])
+            try session.setCategory(.record, mode: .measurement)
             try session.setActive(true)
 
             let input = audioEngine.inputNode
@@ -75,4 +75,3 @@ final class TunerEngine: ObservableObject {
         cents = GuitarString.cents(from: frequency, to: string.frequency)
     }
 }
-
