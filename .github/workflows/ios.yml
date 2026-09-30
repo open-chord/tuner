@@ -1,0 +1,22 @@
+name: iOS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test tuning core
+        run: swift test
+      - name: Build iOS app
+        run: >-
+          xcodebuild build
+          -project Tuner.xcodeproj
+          -scheme Tuner
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
