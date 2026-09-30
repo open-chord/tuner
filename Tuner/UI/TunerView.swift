@@ -2,106 +2,310 @@ import SwiftUI
 
 struct TunerView: View {
     @StateObject private var engine = TunerEngine()
+    @State private var glowMoves = false
 
     private var isListening: Bool { engine.state == .listening }
     private var isInTune: Bool { abs(engine.cents) <= 5 && engine.frequency != nil }
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer()
+        ZStack {
+            background
 
-            Menu {
-                Picker("Строй", selection: $engine.tuning) {
-                    ForEach(TuningPreset.all) { tuning in
-                        VStack(alignment: .leading) {
-                            Text(tuning.name)
-                            Text(tuning.summary)
-                        }
+            VStack(spacing: 0) {
+                header
+                Spacer(minLength: 18)
+                tunerCard
+                Spacer(minLength: 18)
+                stringStrip
+                Spacer(minLength: 22)
+                primaryAction
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 18)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
+                glowMoves = true
+            }
+        }
+    }
+
+    private var background: some View {
+        ZStack {
+            Color(red: 0.025, green: 0.03, blue: 0.045)
+
+            Circle()
+                .fill(Color.cyan.opacity(isListening ? 0.22 : 0.13))
+                .frame(width: 420, height: 420)
+                .blur(radius: 85)
+                .offset(x: glowMoves ? 180 : 110, y: glowMoves ? -300 : -250)
+
+            Circle()
+                .fill((isInTune ? Color.green : Color.indigo).opacity(0.2))
+                .frame(width: 360, height: 360)
+                .blur(radius: 95)
+                .offset(x: glowMoves ? -170 : -110, y: glowMoves ? 330 : 280)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.42)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+        .animation(.smooth(duration: 0.8), value: isListening)
+        .animation(.smooth(duration: 0.8), value: isInTune)
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Label("Tuner", systemImage: "waveform")
+                .font(.headline.weight(.bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.white)
+
+            Spacer()
+            tuningMenu
+        }
+        .frame(height: 52)
+    }
+
+    private var tuningMenu: some View {
+        Menu {
+            Picker("Строй", selection: $engine.tuning) {
+                ForEach(TuningPreset.all) { tuning in
+                    Label(tuning.name, systemImage: tuning.id == engine.tuning.id ? "checkmark" : "guitars")
                         .tag(tuning)
+                }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(engine.tuning.name)
+                        .font(.subheadline.weight(.semibold))
+                    Text(engine.tuning.summary)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .tunerGlass(cornerRadius: 22)
+        .accessibilityLabel("Строй: \(engine.tuning.name)")
+    }
+
+    private var tunerCard: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 4) {
+                Text(statusEyebrow)
+                    .font(.caption.weight(.bold))
+                    .tracking(1.8)
+                    .foregroundStyle(statusColor)
+
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(engine.guitarString?.name ?? "—")
+                        .font(.system(size: 116, weight: .semibold, design: .rounded))
+                        .contentTransition(.numericText())
+
+                    if let octave = engine.guitarString?.octave {
+                        Text("\(octave)")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.secondary)
                     }
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(engine.tuning.name.uppercased())
-                    Image(systemName: "chevron.down")
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(1.5)
+                .frame(height: 126)
             }
-
-            Text(engine.tuning.summary)
-                .font(.caption.monospaced())
-                .foregroundStyle(.tertiary)
-
-            Text(engine.guitarString?.name ?? "—")
-                .font(.system(size: 124, weight: .medium, design: .rounded))
-                .contentTransition(.numericText())
-
-            Text(engine.guitarString.map { "\($0.name)\($0.octave)" } ?? "Сыграй открытую струну")
-                .font(.title3)
-                .foregroundStyle(.secondary)
 
             tuningMeter
 
-            Text(statusText)
-                .font(.headline)
-                .foregroundStyle(isInTune ? .green : .primary)
-                .frame(height: 24)
-
-            if case .permissionDenied = engine.state {
-                Text("Разреши доступ к микрофону в Настройках, чтобы тюнер мог услышать гитару.")
-                    .multilineTextAlignment(.center)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(centsText)
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .contentTransition(.numericText())
+                Text("cents")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Text(statusText)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .frame(height: 24)
 
-            Button(isListening ? "Остановить" : "Начать настройку") {
-                if isListening {
-                    engine.stop()
-                } else {
-                    Task { await engine.start() }
-                }
+            if case .permissionDenied = engine.state {
+                Label("Разреши микрофон в Настройках", systemImage: "mic.slash.fill")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.orange)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
         }
-        .padding(32)
-        .background(Color(.systemBackground))
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 28)
+        .tunerGlass(cornerRadius: 38)
+        .overlay {
+            RoundedRectangle(cornerRadius: 38, style: .continuous)
+                .stroke(statusColor.opacity(isListening ? 0.28 : 0.08), lineWidth: 1)
+        }
+        .shadow(color: statusColor.opacity(isInTune ? 0.16 : 0.06), radius: 35, y: 16)
+        .animation(.smooth, value: isInTune)
     }
 
     private var tuningMeter: some View {
-        VStack(spacing: 10) {
-            GeometryReader { geometry in
-                ZStack {
-                    Capsule().fill(.quaternary)
-                    Rectangle()
-                        .fill(isInTune ? Color.green : Color.accentColor)
-                        .frame(width: 3)
-                        .offset(x: meterOffset(width: geometry.size.width))
-                }
-            }
-            .frame(height: 12)
+        GeometryReader { geometry in
+            let width = geometry.size.width
 
-            HStack {
-                Text("НИЖЕ")
-                Spacer()
-                Text("ВЫШЕ")
+            ZStack {
+                Capsule()
+                    .fill(.white.opacity(0.09))
+                    .frame(height: 7)
+
+                HStack(spacing: 0) {
+                    ForEach(0..<9, id: \.self) { index in
+                        Rectangle()
+                            .fill(.white.opacity(index == 4 ? 0.62 : 0.18))
+                            .frame(width: index == 4 ? 2 : 1, height: index == 4 ? 20 : 10)
+                        if index < 8 { Spacer() }
+                    }
+                }
+
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
+                    .shadow(color: statusColor.opacity(0.8), radius: 12)
+                    .offset(x: meterOffset(width: width))
+                    .animation(.snappy(duration: 0.25), value: engine.cents)
             }
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
         }
+        .frame(height: 24)
+        .padding(.horizontal, 4)
+    }
+
+    private var stringStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(engine.tuning.strings) { string in
+                let isActive = engine.guitarString?.id == string.id
+
+                VStack(spacing: 1) {
+                    Text(string.name)
+                        .font(.headline.weight(.bold))
+                    Text("\(string.octave)")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .foregroundStyle(isActive ? statusColor : .white.opacity(0.72))
+                .background(
+                    isActive ? statusColor.opacity(0.14) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(isActive ? statusColor.opacity(0.32) : .white.opacity(0.06))
+                }
+                .animation(.snappy, value: isActive)
+            }
+        }
+        .padding(8)
+        .tunerGlass(cornerRadius: 26)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Струны: \(engine.tuning.summary)")
+    }
+
+    private var primaryAction: some View {
+        Button {
+            if isListening {
+                engine.stop()
+            } else {
+                Task { await engine.start() }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: isListening ? "stop.fill" : "mic.fill")
+                    .contentTransition(.symbolEffect(.replace))
+                Text(isListening ? "Остановить" : "Начать настройку")
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .frame(height: 58)
+        }
+        .tunerProminentGlassButton()
+        .tint(isListening ? .white.opacity(0.2) : .white)
+        .foregroundStyle(isListening ? .white : .black)
+        .sensoryFeedback(.impact(weight: .medium), trigger: isListening)
+    }
+
+    private var statusEyebrow: String {
+        if isInTune { return "IN TUNE" }
+        return isListening ? "LISTENING" : engine.tuning.name.uppercased()
     }
 
     private var statusText: String {
-        guard engine.frequency != nil else { return isListening ? "Слушаю…" : "" }
+        guard engine.frequency != nil else {
+            return isListening ? "Сыграй открытую струну" : "Готов к настройке"
+        }
         if isInTune { return "Настроено" }
         return engine.cents < 0 ? "Подтяни струну" : "Ослабь струну"
     }
 
+    private var centsText: String {
+        guard engine.frequency != nil else { return "—" }
+        let cents = Int(engine.cents.rounded())
+        return cents > 0 ? "+\(cents)" : "\(cents)"
+    }
+
+    private var statusColor: Color {
+        if isInTune { return .green }
+        return isListening ? .cyan : .white
+    }
+
     private func meterOffset(width: CGFloat) -> CGFloat {
+        guard engine.frequency != nil else { return 0 }
         let clamped = min(max(engine.cents, -50), 50)
-        return CGFloat(clamped / 50) * (width / 2)
+        return CGFloat(clamped / 50) * ((width - 22) / 2)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func tunerGlass(cornerRadius: CGFloat) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            fallbackGlass(cornerRadius: cornerRadius)
+        }
+        #else
+        fallbackGlass(cornerRadius: cornerRadius)
+        #endif
+    }
+
+    func fallbackGlass(cornerRadius: CGFloat) -> some View {
+        background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
+    }
+
+    @ViewBuilder
+    func tunerProminentGlassButton() -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            buttonStyle(.glassProminent)
+        } else {
+            buttonStyle(.borderedProminent)
+        }
+        #else
+        buttonStyle(.borderedProminent)
+        #endif
     }
 }
