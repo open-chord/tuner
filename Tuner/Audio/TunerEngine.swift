@@ -14,6 +14,9 @@ final class TunerEngine: ObservableObject {
     @Published private(set) var frequency: Double?
     @Published private(set) var guitarString: GuitarString?
     @Published private(set) var cents: Double = 0
+    @Published var tuning: TuningPreset = .standard {
+        didSet { update(with: frequency) }
+    }
 
     private let audioEngine = AVAudioEngine()
 
@@ -63,7 +66,7 @@ final class TunerEngine: ObservableObject {
     }
 
     private func update(with frequency: Double?) {
-        guard let frequency, let string = GuitarString.nearest(to: frequency) else {
+        guard let frequency, let string = tuning.nearestString(to: frequency) else {
             self.frequency = nil
             guitarString = nil
             cents = 0
