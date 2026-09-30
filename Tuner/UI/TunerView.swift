@@ -12,11 +12,11 @@ struct TunerView: View {
 
             VStack(spacing: 0) {
                 header
-                Spacer(minLength: 18)
+                Spacer(minLength: 8)
                 tunerCard
-                Spacer(minLength: 18)
+                Spacer(minLength: 10)
                 stringStrip
-                Spacer(minLength: 22)
+                Spacer(minLength: 16)
                 primaryAction
             }
             .padding(.horizontal, 20)
@@ -46,7 +46,7 @@ struct TunerView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Label("Guitar Tuner", systemImage: "waveform")
+            Label("OpenTuner", systemImage: "waveform")
                 .font(.headline.weight(.semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.white)
@@ -54,7 +54,7 @@ struct TunerView: View {
             Spacer()
             tuningMenu
         }
-        .frame(height: 52)
+        .frame(height: 44)
     }
 
     private var tuningMenu: some View {
@@ -88,16 +88,11 @@ struct TunerView: View {
     }
 
     private var tunerCard: some View {
-        VStack(spacing: 22) {
-            VStack(spacing: 4) {
-                Text(statusEyebrow)
-                    .font(.caption.weight(.bold))
-                    .tracking(1.8)
-                    .foregroundStyle(statusColor)
-
+        VStack(spacing: 16) {
+            VStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(engine.guitarString?.name ?? "—")
-                        .font(.system(size: 128, weight: .light, design: .default))
+                        .font(.system(size: 110, weight: .light, design: .default))
                         .contentTransition(.numericText())
 
                     if let octave = engine.guitarString?.octave {
@@ -106,24 +101,26 @@ struct TunerView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .frame(height: 126)
+                .frame(height: 108)
             }
 
             tuningMeter
 
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(centsText)
-                    .font(.title3.weight(.semibold).monospacedDigit())
-                    .contentTransition(.numericText())
-                Text("cents")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
+            HStack(spacing: 8) {
+                Text(statusText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(statusColor)
 
-            Text(statusText)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(statusColor)
-                .frame(height: 24)
+                if engine.frequency != nil {
+                    Text("·")
+                        .foregroundStyle(.tertiary)
+                    Text("\(centsText) ¢")
+                        .font(.subheadline.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                }
+            }
+            .frame(height: 22)
 
             if case .permissionDenied = engine.state {
                 Label("Разреши микрофон в Настройках", systemImage: "mic.slash.fill")
@@ -133,7 +130,7 @@ struct TunerView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
-        .padding(.vertical, 20)
+        .padding(.vertical, 12)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.white.opacity(0.09))
@@ -183,15 +180,10 @@ struct TunerView: View {
             ForEach(engine.tuning.strings) { string in
                 let isActive = engine.guitarString?.id == string.id
 
-                VStack(spacing: 1) {
-                    Text(string.name)
-                        .font(.headline.weight(.bold))
-                    Text("\(string.octave)")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
+                Text(string.name)
+                    .font(.headline.weight(.semibold))
                 .frame(maxWidth: .infinity)
-                .frame(height: 52)
+                .frame(height: 38)
                 .foregroundStyle(isActive ? statusColor : .white.opacity(0.46))
                 .overlay(alignment: .bottom) {
                     Capsule()
@@ -221,17 +213,12 @@ struct TunerView: View {
             }
             .font(.headline)
             .frame(maxWidth: .infinity)
-            .frame(height: 58)
+            .frame(height: 52)
         }
         .tunerProminentGlassButton()
         .tint(isListening ? .white.opacity(0.2) : .white)
         .foregroundStyle(isListening ? .white : .black)
         .sensoryFeedback(.impact(weight: .medium), trigger: isListening)
-    }
-
-    private var statusEyebrow: String {
-        if isInTune { return "IN TUNE" }
-        return isListening ? "LISTENING" : engine.tuning.name.uppercased()
     }
 
     private var statusText: String {
