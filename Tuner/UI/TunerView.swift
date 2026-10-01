@@ -88,39 +88,13 @@ struct TunerView: View {
     }
 
     private var tunerCard: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(engine.guitarString?.name ?? "—")
-                        .font(.system(size: 110, weight: .light, design: .default))
-                        .contentTransition(.numericText())
+        VStack(spacing: 8) {
+            tuningDial
 
-                    if let octave = engine.guitarString?.octave {
-                        Text("\(octave)")
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(height: 108)
-            }
-
-            tuningMeter
-
-            HStack(spacing: 8) {
-                Text(statusText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(statusColor)
-
-                if engine.frequency != nil {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text("\(centsText) ¢")
-                        .font(.subheadline.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.numericText())
-                }
-            }
-            .frame(height: 22)
+            Text(statusText)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .frame(height: 22)
 
             if case .permissionDenied = engine.state {
                 Label("Разреши микрофон в Настройках", systemImage: "mic.slash.fill")
@@ -129,50 +103,102 @@ struct TunerView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(.white.opacity(0.09))
-                .frame(height: 0.5)
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.white.opacity(0.09))
-                .frame(height: 0.5)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .tunerGlass(cornerRadius: 28)
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.1), lineWidth: 0.6)
         }
         .animation(.smooth, value: isInTune)
     }
 
-    private var tuningMeter: some View {
+    private var tuningDial: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
+            let height = geometry.size.height
+            let center = CGPoint(x: width / 2, y: height * 0.73)
+            let radius = min(width * 0.42, height * 0.68)
 
             ZStack {
-                Capsule()
-                    .fill(.white.opacity(0.09))
-                    .frame(height: 7)
+                TunerDialArc()
+                    .stroke(.white.opacity(0.11), style: StrokeStyle(lineWidth: 16, lineCap: .butt))
+                    .padding(.horizontal, width * 0.08)
 
-                HStack(spacing: 0) {
-                    ForEach(0..<9, id: \.self) { index in
-                        Rectangle()
-                            .fill(.white.opacity(index == 4 ? 0.62 : 0.18))
-                            .frame(width: index == 4 ? 2 : 1, height: index == 4 ? 20 : 10)
-                        if index < 8 { Spacer() }
+                ForEach(-5...5, id: \.self) { step in
+                    let angle = Double(step) * 12
+                    let radians = angle * .pi / 180
+                    let isMajor = step == 0 || abs(step) == 5
+
+                    Capsule()
+                        .fill(step == 0 ? .white.opacity(0.72) : .white.opacity(0.2))
+                        .frame(width: isMajor ? 2 : 1, height: isMajor ? 16 : 11)
+                        .rotationEffect(.degrees(angle))
+                        .position(
+                            x: center.x + CGFloat(sin(radians)) * radius,
+                            y: center.y - CGFloat(cos(radians)) * radius
+                        )
+
+                    if step.isMultiple(of: 5) || step == 0 {
+                        Text("\(step * 10)")
+                            .font(.caption2.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.white.opacity(step == 0 ? 0.72 : 0.34))
+                            .position(
+                                x: center.x + CGFloat(sin(radians)) * (radius + 27),
+                                y: center.y - CGFloat(cos(radians)) * (radius + 27)
+                            )
                     }
                 }
 
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 22, height: 22)
-                    .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
-                    .shadow(color: statusColor.opacity(0.8), radius: 12)
-                    .offset(x: meterOffset(width: width))
+                Capsule()
+                    .fill(needleColor)
+                    .frame(width: 2.5, height: radius - 8)
+                    .shadow(color: needleColor.opacity(0.7), radius: 5)
+                    .offset(y: -(radius - 8) / 2)
+                    .rotationEffect(.degrees(needleAngle), anchor: .bottom)
+                    .position(center)
                     .animation(.snappy(duration: 0.25), value: engine.cents)
+
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 18, height: 18)
+                    .overlay(Circle().fill(needleColor).frame(width: 6, height: 6))
+                    .overlay(Circle().stroke(.white.opacity(0.28), lineWidth: 0.5))
+                    .position(center)
+
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(engine.guitarString?.name ?? "—")
+                        .font(.system(size: 74, weight: .light))
+                        .contentTransition(.numericText())
+
+                    if let octave = engine.guitarString?.octave {
+                        Text("\(octave)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .position(x: center.x, y: center.y + 42)
+
+                dialReadout(frequencyText, unit: "Hz")
+                    .position(x: width * 0.23, y: center.y + 26)
+
+                dialReadout(centsText, unit: "cents")
+                    .position(x: width * 0.77, y: center.y + 26)
             }
         }
-        .frame(height: 24)
-        .padding(.horizontal, 4)
+        .frame(height: 230)
+    }
+
+    private func dialReadout(_ value: String, unit: String) -> some View {
+        HStack(spacing: 3) {
+            Text(value)
+                .contentTransition(.numericText())
+            Text(unit)
+                .foregroundStyle(.tertiary)
+        }
+        .font(.caption.weight(.semibold).monospacedDigit())
+        .foregroundStyle(.secondary)
     }
 
     private var stringStrip: some View {
@@ -305,15 +331,43 @@ struct TunerView: View {
         return cents > 0 ? "+\(cents)" : "\(cents)"
     }
 
+    private var frequencyText: String {
+        guard let frequency = engine.frequency else { return "—" }
+        return frequency.formatted(.number.precision(.fractionLength(1)))
+    }
+
+    private var needleAngle: Double {
+        guard engine.frequency != nil else { return 0 }
+        return min(max(engine.cents, -50), 50) * 1.2
+    }
+
+    private var needleColor: Color {
+        isInTune ? .green : .orange
+    }
+
     private var statusColor: Color {
         if isInTune { return .green }
         return .white
     }
 
-    private func meterOffset(width: CGFloat) -> CGFloat {
-        guard engine.frequency != nil else { return 0 }
-        let clamped = min(max(engine.cents, -50), 50)
-        return CGFloat(clamped / 50) * ((width - 22) / 2)
+}
+
+private struct TunerDialArc: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.height * 0.73)
+        let radius = min(rect.width * 0.42, rect.height * 0.68)
+
+        for index in 0...60 {
+            let angle = -60.0 + Double(index) * 2
+            let radians = angle * .pi / 180
+            let point = CGPoint(
+                x: center.x + CGFloat(sin(radians)) * radius,
+                y: center.y - CGFloat(cos(radians)) * radius
+            )
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
     }
 }
 
