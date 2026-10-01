@@ -4,13 +4,14 @@
 
 - Tune a six-string guitar using Standard, Drop D, Half Step Down, D Standard,
   Drop C, or C Standard presets.
+- Create and save custom tunings with up to 12 independently configured strings.
 - Process microphone audio on-device; no recording or upload.
 - Show the nearest string, tuning direction, and an in-tune state.
 - Work without an account and without a network connection.
 
 ## Not in the first version
 
-- Custom tunings and chromatic mode.
+- Chromatic mode.
 - Metronome, lessons, accounts, subscriptions, analytics, or advertising.
 
 ## App Store checkpoints

@@ -1,18 +1,25 @@
+import Combine
 import Foundation
 
-struct GuitarString: Equatable, Hashable, Identifiable, Sendable {
+struct GuitarString: Codable, Equatable, Hashable, Identifiable, Sendable {
+    let id: String
     let name: String
     let octave: Int
     let frequency: Double
 
-    var id: String { "\(name)\(octave)" }
+    init(id: String? = nil, name: String, octave: Int, frequency: Double) {
+        self.id = id ?? "\(name)\(octave)-\(frequency)"
+        self.name = name
+        self.octave = octave
+        self.frequency = frequency
+    }
 
     static func cents(from frequency: Double, to reference: Double) -> Double {
         1_200 * log2(frequency / reference)
     }
 }
 
-struct TuningPreset: Equatable, Hashable, Identifiable, Sendable {
+struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
     let id: String
     let name: String
     let strings: [GuitarString]
@@ -98,6 +105,88 @@ struct TuningPreset: Equatable, Hashable, Identifiable, Sendable {
     private static func makeStrings(
         _ values: [(name: String, octave: Int, frequency: Double)]
     ) -> [GuitarString] {
-        values.map(GuitarString.init)
+        values.enumerated().map { index, value in
+            GuitarString(
+                id: "preset-\(index)-\(value.name)-\(value.octave)",
+                name: value.name,
+                octave: value.octave,
+                frequency: value.frequency
+            )
+        }
     }
+}
+
+@MainActor
+final class CustomTuningStore: ObservableObject {
+    @Published private(set) var presets: [TuningPreset]
+
+    private let defaults: UserDefaults
+    private let storageKey: String
+
+    init(defaults: UserDefaults = .standard, storageKey: String = "custom-tunings-v1") {
+        self.defaults = defaults
+        self.storageKey = storageKey
+        presets = Self.load(from: defaults, key: storageKey)
+    }
+
+    func save(name: String, strings: [GuitarString]) -> TuningPreset {
+        let preset = TuningPreset(
+            id: "custom-\(UUID().uuidString)",
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            strings: strings
+        )
+        presets.append(preset)
+        persist()
+        return preset
+    }
+
+    func delete(_ preset: TuningPreset) {
+        presets.removeAll { $0.id == preset.id }
+        persist()
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        defaults.set(data, forKey: storageKey)
+    }
+
+    private static func load(from defaults: UserDefaults, key: String) -> [TuningPreset] {
+        guard let data = defaults.data(forKey: key),
+              let presets = try? JSONDecoder().decode([TuningPreset].self, from: data) else {
+            return []
+        }
+        return presets
+    }
+}
+
+struct CustomStringDraft: Identifiable, Equatable {
+    let id: UUID
+    var note: String
+    var octave: Int
+
+    init(id: UUID = UUID(), note: String, octave: Int) {
+        self.id = id
+        self.note = note
+        self.octave = octave
+    }
+
+    var guitarString: GuitarString {
+        let pitchClass = Self.notes.firstIndex(of: note) ?? 0
+        let midiNote = (octave + 1) * 12 + pitchClass
+        let frequency = 440 * pow(2, Double(midiNote - 69) / 12)
+        return GuitarString(
+            id: "custom-string-\(id.uuidString)",
+            name: note,
+            octave: octave,
+            frequency: frequency
+        )
+    }
+
+    static let notes = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
+
+    static let standard: [CustomStringDraft] = [
+        .init(note: "E", octave: 2), .init(note: "A", octave: 2),
+        .init(note: "D", octave: 3), .init(note: "G", octave: 3),
+        .init(note: "B", octave: 3), .init(note: "E", octave: 4),
+    ]
 }

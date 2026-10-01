@@ -40,4 +40,34 @@ final class GuitarStringTests: XCTestCase {
 
         XCTAssertEqual(target, highE)
     }
+
+    func testCustomStringCalculatesConcertA() {
+        let string = CustomStringDraft(note: "A", octave: 4).guitarString
+
+        XCTAssertEqual(string.frequency, 440, accuracy: 0.001)
+    }
+
+    func testCustomStringsKeepUniquePositionsForRepeatedNotes() {
+        let first = CustomStringDraft(note: "E", octave: 4).guitarString
+        let second = CustomStringDraft(note: "E", octave: 4).guitarString
+
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertEqual(first.frequency, second.frequency, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testCustomTuningPersistsBetweenStoreInstances() throws {
+        let suiteName = "CustomTuningStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = CustomTuningStore(defaults: defaults, storageKey: "tunings")
+        let saved = store.save(
+            name: "Open C",
+            strings: [CustomStringDraft(note: "C", octave: 2).guitarString]
+        )
+        let restored = CustomTuningStore(defaults: defaults, storageKey: "tunings")
+
+        XCTAssertEqual(restored.presets, [saved])
+    }
 }
