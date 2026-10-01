@@ -10,10 +10,29 @@ struct TunerView: View {
         VStack(spacing: 28) {
             Spacer()
 
-            Text("STANDARD")
+            Menu {
+                Picker("Строй", selection: $engine.tuning) {
+                    ForEach(TuningPreset.all) { tuning in
+                        VStack(alignment: .leading) {
+                            Text(tuning.name)
+                            Text(tuning.summary)
+                        }
+                        .tag(tuning)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(engine.tuning.name.uppercased())
+                    Image(systemName: "chevron.down")
+                }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .tracking(2)
+                .tracking(1.5)
+            }
+
+            Text(engine.tuning.summary)
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
 
             Text(engine.guitarString?.name ?? "—")
                 .font(.system(size: 124, weight: .medium, design: .rounded))
@@ -86,4 +105,3 @@ struct TunerView: View {
         return CGFloat(clamped / 50) * (width / 2)
     }
 }
-
