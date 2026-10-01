@@ -269,15 +269,21 @@ struct TunerView: View {
             HStack(spacing: 10) {
                 Image(systemName: isListening ? "stop.fill" : "mic.fill")
                     .contentTransition(.symbolEffect(.replace))
+                    .foregroundStyle(isListening ? .red : .white)
                 Text(isListening ? "Остановить" : "Начать настройку")
             }
             .font(.headline)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .tunerInteractiveGlass(cornerRadius: 18)
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.white.opacity(isListening ? 0.13 : 0.2), lineWidth: 0.6)
+            }
         }
-        .tunerProminentGlassButton()
-        .tint(isListening ? .white.opacity(0.2) : .white)
-        .foregroundStyle(isListening ? .white : .black)
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
         .sensoryFeedback(.impact(weight: .medium), trigger: isListening)
     }
 
@@ -333,15 +339,15 @@ private extension View {
     }
 
     @ViewBuilder
-    func tunerProminentGlassButton() -> some View {
+    func tunerInteractiveGlass(cornerRadius: CGFloat) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            buttonStyle(.glassProminent)
+            glassEffect(.regular.interactive(), in: .rect(cornerRadius: cornerRadius))
         } else {
-            buttonStyle(.borderedProminent)
+            fallbackGlass(cornerRadius: cornerRadius)
         }
         #else
-        buttonStyle(.borderedProminent)
+        fallbackGlass(cornerRadius: cornerRadius)
         #endif
     }
 }
