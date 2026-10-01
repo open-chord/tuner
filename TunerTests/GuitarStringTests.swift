@@ -30,4 +30,14 @@ final class GuitarStringTests: XCTestCase {
             XCTAssertEqual(Set(preset.strings.map(\.id)).count, 6, preset.name)
         }
     }
+
+    func testManualSelectionOverridesAutomaticDetection() throws {
+        let highE = try XCTUnwrap(TuningPreset.dropD.strings.last)
+        let target = TuningPreset.dropD.targetString(
+            for: 73.42,
+            selectedStringID: highE.id
+        )
+
+        XCTAssertEqual(target, highE)
+    }
 }

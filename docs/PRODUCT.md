@@ -1,4 +1,4 @@
-# Product baseline
+# OpenTuner product baseline
 
 ## Version 1 scope
 
