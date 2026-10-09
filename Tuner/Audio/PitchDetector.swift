@@ -4,7 +4,7 @@ enum PitchDetector {
     static func estimateFrequency(
         samples: [Float],
         sampleRate: Double,
-        minimumFrequency: Double = 70,
+        minimumFrequency: Double = 55,
         maximumFrequency: Double = 400
     ) -> Double? {
         guard samples.count >= 512, sampleRate > 0 else { return nil }
@@ -46,4 +46,3 @@ enum PitchDetector {
         return sampleRate / Double(bestLag)
     }
 }
-
