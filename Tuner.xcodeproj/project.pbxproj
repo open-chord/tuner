@@ -15,6 +15,10 @@
 		A10000000000000000000006 /* GuitarStringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* GuitarStringTests.swift */; };
 		A10000000000000000000007 /* PitchDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* PitchDetectorTests.swift */; };
 		A10000000000000000000008 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* XCTest.framework */; };
+		A10000000000000000000009 /* TuningCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* TuningCardView.swift */; };
+		A1000000000000000000000A /* StringSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* StringSelectionView.swift */; };
+		A1000000000000000000000B /* CustomTuningBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* CustomTuningBuilder.swift */; };
+		A1000000000000000000000C /* TunerGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* TunerGlass.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +43,10 @@
 		B10000000000000000000009 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
 		B1000000000000000000000A /* Tuner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tuner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1000000000000000000000B /* TunerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TunerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000000C /* TuningCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TuningCardView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* StringSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringSelectionView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000E /* CustomTuningBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomTuningBuilder.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* TunerGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunerGlass.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +119,10 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000005 /* TunerView.swift */,
+				B1000000000000000000000C /* TuningCardView.swift */,
+				B1000000000000000000000D /* StringSelectionView.swift */,
+				B1000000000000000000000E /* CustomTuningBuilder.swift */,
+				B1000000000000000000000F /* TunerGlass.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -252,6 +264,10 @@
 				A10000000000000000000003 /* PitchDetector.swift in Sources */,
 				A10000000000000000000004 /* TunerEngine.swift in Sources */,
 				A10000000000000000000005 /* TunerView.swift in Sources */,
+				A10000000000000000000009 /* TuningCardView.swift in Sources */,
+				A1000000000000000000000A /* StringSelectionView.swift in Sources */,
+				A1000000000000000000000B /* CustomTuningBuilder.swift in Sources */,
+				A1000000000000000000000C /* TunerGlass.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
