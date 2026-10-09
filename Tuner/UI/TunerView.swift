@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// Главный экран. Он только показывает состояние `TunerEngine` и передаёт
-/// действия пользователя движку; обработка микрофона остаётся вне SwiftUI.
+/// The main screen displays TunerEngine state and forwards user actions to it.
+/// Microphone processing stays outside SwiftUI.
 struct TunerView: View {
-    // `@StateObject` сохраняет эти объекты при повторной отрисовке View.
+    // `@StateObject` preserves these instances when SwiftUI recomputes the view.
     @StateObject private var engine = TunerEngine()
     @StateObject private var customTunings = CustomTuningStore()
     @State private var isShowingTuningBuilder = false
 
     private var isListening: Bool { engine.state == .listening }
-    // Попадание в диапазон ±5 центов показываем зелёным только при живом сигнале.
+    // Show green within ±5 cents, but only when an actual frequency is present.
     private var isInTune: Bool { abs(engine.cents) <= 5 && engine.frequency != nil }
 
-    // MARK: - Компоновка экрана
+    // MARK: - Screen layout
 
-    /// SwiftUI заново вычисляет описание экрана при смене `@Published`/`@State`.
+    /// SwiftUI recomputes this view description when observed state changes.
     var body: some View {
         ZStack {
             background
@@ -34,7 +34,7 @@ struct TunerView: View {
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isShowingTuningBuilder) {
-            // После сохранения новый строй сразу становится активным.
+            // Activate the newly saved tuning immediately.
             CustomTuningBuilder { name, strings in
                 engine.tuning = customTunings.save(name: name, strings: strings)
             }
@@ -73,7 +73,7 @@ struct TunerView: View {
         .frame(height: 44)
     }
 
-    // MARK: - Выбор строя
+    // MARK: - Tuning selection
 
     private var tuningMenu: some View {
         Menu {
@@ -96,7 +96,7 @@ struct TunerView: View {
                 Menu("Удалить свой строй", systemImage: "trash") {
                     ForEach(customTunings.presets) { preset in
                         Button(preset.name, role: .destructive) {
-                            // Нельзя оставить активным пресет, которого уже нет в меню.
+                            // Do not leave a deleted preset active.
                             if engine.tuning.id == preset.id {
                                 engine.tuning = .standard
                             }
@@ -127,7 +127,7 @@ struct TunerView: View {
         .accessibilityLabel("Строй: \(engine.tuning.name)")
     }
 
-    // MARK: - Прибор настройки
+    // MARK: - Tuning dial
 
     private var tunerCard: some View {
         VStack(spacing: 8) {
@@ -158,8 +158,8 @@ struct TunerView: View {
 
     private var tuningDial: some View {
         GeometryReader { geometry in
-            // Центр стрелки расположен ниже центра карточки: сверху остаётся
-            // место для полукруглой шкалы, снизу — для ноты и показаний.
+            // Place the pivot below the card's center so the arc has room above
+            // and the note and readouts fit below it.
             let width = geometry.size.width
             let height = geometry.size.height
             let center = CGPoint(x: width / 2, y: height * 0.73)
@@ -171,7 +171,7 @@ struct TunerView: View {
                     .padding(.horizontal, width * 0.08)
 
                 ForEach(-5...5, id: \.self) { step in
-                    // 11 делений покрывают от −50 до +50 центов; 12° на шаг.
+                    // Eleven ticks cover −50 to +50 cents at 12° per step.
                     let angle = Double(step) * 12
                     let radians = angle * .pi / 180
                     let isMajor = step == 0 || abs(step) == 5
@@ -196,8 +196,8 @@ struct TunerView: View {
                     }
                 }
 
-                // Стрелка поворачивается вокруг нижней точки и следует за
-                // значением `cents`; центральный кружок скрывает её ось.
+                // Rotate the needle around its bottom point using `cents`.
+                // The center circle conceals the needle's pivot.
                 Capsule()
                     .fill(needleColor)
                     .frame(width: 2.5, height: radius - 8)
@@ -248,10 +248,10 @@ struct TunerView: View {
         .foregroundStyle(.secondary)
     }
 
-    // MARK: - Автоопределение и ручной выбор струны
+    // MARK: - Automatic and manual string selection
 
     private var stringStrip: some View {
-        // Горизонтальная прокрутка оставляет место для строев до 12 струн.
+        // Horizontal scrolling supports tunings with up to 12 strings.
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 autoModeButton
@@ -314,7 +314,7 @@ struct TunerView: View {
 
     private func stringButton(_ string: GuitarString) -> some View {
         let isSelected = string.id == engine.selectedStringID
-        // В AUTO подсвечиваем услышанную струну, не переключая режим вручную.
+        // In AUTO, highlight the detected string without entering manual mode.
         let isDetected = engine.selectedStringID == nil && engine.guitarString?.id == string.id
         let isActive = isSelected || isDetected
 
@@ -339,7 +339,7 @@ struct TunerView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    // MARK: - Запуск и текстовые показания
+    // MARK: - Listening control and readouts
 
     private var primaryAction: some View {
         Button {
@@ -371,7 +371,7 @@ struct TunerView: View {
     }
 
     private var statusText: String {
-        // Пока микрофон не дал частоту, текст объясняет следующий шаг.
+        // Before the microphone detects a frequency, prompt the next action.
         guard engine.frequency != nil else {
             if let selectedStringID = engine.selectedStringID,
                let string = engine.tuning.strings.first(where: { $0.id == selectedStringID }) {
@@ -396,7 +396,7 @@ struct TunerView: View {
 
     private var needleAngle: Double {
         guard engine.frequency != nil else { return 0 }
-        // Ограничиваем стрелку краями шкалы; 50 центов соответствуют 60°.
+        // Clamp the needle to the dial: 50 cents corresponds to 60°.
         return min(max(engine.cents, -50), 50) * 1.2
     }
 
@@ -411,12 +411,12 @@ struct TunerView: View {
 
 }
 
-/// Форма конструктора собственного строя. Здесь живёт только черновик;
-/// сохранение выполняет `CustomTuningStore` через замыкание `onSave`.
+/// The custom tuning editor owns only draft state. Its `onSave` callback asks
+/// CustomTuningStore to persist the finished tuning.
 private struct CustomTuningBuilder: View {
-    // MARK: - Черновик строя
+    // MARK: - Draft tuning
 
-    // `dismiss` закрывает модальный экран после сохранения или отмены.
+    // `dismiss` closes the sheet after saving or cancelling.
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = "Мой строй"
@@ -428,7 +428,7 @@ private struct CustomTuningBuilder: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !strings.isEmpty
     }
 
-    // MARK: - Форма редактирования
+    // MARK: - Editing form
 
     var body: some View {
         NavigationStack {
@@ -471,13 +471,13 @@ private struct CustomTuningBuilder: View {
                         }
                     }
                     .onDelete { offsets in
-                        // В строе должна остаться хотя бы одна струна.
+                        // A tuning must retain at least one string.
                         guard strings.count - offsets.count >= 1 else { return }
                         strings.remove(atOffsets: offsets)
                     }
 
                     Button {
-                        // Новая струна копирует ноту предыдущей как удобный старт.
+                        // Copy the previous note as a convenient starting point.
                         guard strings.count < 12 else { return }
                         let previous = strings.last ?? .init(note: "E", octave: 2)
                         strings.append(.init(note: previous.note, octave: previous.octave))
@@ -509,7 +509,7 @@ private struct CustomTuningBuilder: View {
     }
 }
 
-/// Рисует дугу шкалы от −60° до +60° короткими отрезками.
+/// Draws the dial arc from −60° to +60° as short line segments.
 private struct TunerDialArc: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -529,11 +529,10 @@ private struct TunerDialArc: Shape {
     }
 }
 
-// MARK: - Материал кнопок и карточек
+// MARK: - Glass materials
 
 private extension View {
-    /// Использует нативное Liquid Glass на iOS 26+, а на старых системах —
-    /// близкий по виду полупрозрачный материал.
+    /// Uses native Liquid Glass on iOS 26+ and a translucent material on older iOS.
     @ViewBuilder
     func tunerGlass(cornerRadius: CGFloat) -> some View {
         #if compiler(>=6.2)
@@ -554,7 +553,7 @@ private extension View {
         )
     }
 
-    /// Интерактивная версия стекла для главной кнопки с реакцией на касание.
+    /// Adds touch-responsive glass to the primary button.
     @ViewBuilder
     func tunerInteractiveGlass(cornerRadius: CGFloat) -> some View {
         #if compiler(>=6.2)

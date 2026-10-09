@@ -1,9 +1,9 @@
 import Foundation
 
-/// Находит основную частоту в коротком фрагменте звука.
-/// Работает с массивом сэмплов и не зависит от микрофона или интерфейса.
+/// Estimates the fundamental frequency of a short audio sample buffer.
+/// This algorithm is independent of the microphone and the UI.
 enum PitchDetector {
-    /// Возвращает частоту в герцах или `nil`, если сигнал слишком тихий/неустойчивый.
+    /// Returns a frequency in hertz, or `nil` for silence or an unreliable signal.
     static func estimateFrequency(
         samples: [Float],
         sampleRate: Double,
@@ -12,14 +12,14 @@ enum PitchDetector {
     ) -> Double? {
         guard samples.count >= 512, sampleRate > 0 else { return nil }
 
-        // Убираем постоянное смещение сигнала, затем отсеиваем тишину по энергии.
+        // Remove the DC offset, then reject silence using the signal's energy.
         let mean = samples.reduce(0, +) / Float(samples.count)
         let centered = samples.map { $0 - mean }
         let energy = centered.reduce(0) { $0 + $1 * $1 } / Float(centered.count)
         guard energy > 0.000_01 else { return nil }
 
-        // Период = частота дискретизации / частота звука. Ограничиваем поиск
-        // рабочим диапазоном тюнера, чтобы не перебирать все возможные периоды.
+        // Period length = sample rate / frequency. Search only the tuner's
+        // supported frequency range instead of every possible period.
         let minimumLag = max(2, Int(sampleRate / maximumFrequency))
         let maximumLag = min(centered.count / 2, Int(sampleRate / minimumFrequency))
         guard minimumLag < maximumLag else { return nil }
@@ -27,8 +27,8 @@ enum PitchDetector {
         var bestLag = minimumLag
         var bestCorrelation: Float = -.infinity
 
-        // Автокорреляция сравнивает сигнал с его копией, сдвинутой на `lag`.
-        // Самое сильное совпадение указывает на длину повторяющейся волны.
+        // Autocorrelation compares the signal with a copy shifted by `lag`.
+        // The strongest match estimates the repeating waveform's period.
         for lag in minimumLag...maximumLag {
             var correlation: Float = 0
             var leftEnergy: Float = 0
@@ -42,8 +42,8 @@ enum PitchDetector {
                 rightEnergy += right * right
             }
 
-            // Нормализация не даёт более громкому участку выигрывать только
-            // из-за амплитуды: сравниваем сходство формы волны.
+            // Normalize so a louder segment cannot win solely because of its
+            // amplitude; we want to compare waveform shape.
             let denominator = sqrt(leftEnergy * rightEnergy)
             let normalized = denominator > 0 ? correlation / denominator : 0
             if normalized > bestCorrelation {
@@ -52,7 +52,7 @@ enum PitchDetector {
             }
         }
 
-        // Слабое совпадение считаем шумом, а не музыкальной нотой.
+        // Treat a weak match as noise rather than a stable musical pitch.
         guard bestCorrelation > 0.75 else { return nil }
         return sampleRate / Double(bestLag)
     }
