@@ -1,6 +1,8 @@
 import XCTest
 @testable import Tuner
 
+/// Synthetic tones with known frequencies test the algorithm without relying
+/// on a microphone, room acoustics, or a particular guitar.
 final class PitchDetectorTests: XCTestCase {
     func testDetectsLowE() throws {
         let sampleRate = 44_100.0
