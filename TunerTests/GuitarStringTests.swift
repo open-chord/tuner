@@ -1,6 +1,7 @@
 import XCTest
 @testable import Tuner
 
+/// Проверяем музыкальную модель отдельно от микрофона и интерфейса.
 final class GuitarStringTests: XCTestCase {
     func testFindsNearestStandardString() throws {
         let string = try XCTUnwrap(TuningPreset.standard.nearestString(to: 112))
@@ -57,6 +58,7 @@ final class GuitarStringTests: XCTestCase {
 
     @MainActor
     func testCustomTuningPersistsBetweenStoreInstances() throws {
+        // Отдельный UserDefaults suite не затрагивает реальные строи пользователя.
         let suiteName = "CustomTuningStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }

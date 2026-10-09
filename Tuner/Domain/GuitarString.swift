@@ -1,6 +1,8 @@
 import Combine
 import Foundation
 
+/// Одна физическая струна и частота, к которой её нужно настроить.
+/// В пресетах `id` обозначает место струны: одинаковые ноты могут встречаться дважды.
 struct GuitarString: Codable, Equatable, Hashable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -14,11 +16,14 @@ struct GuitarString: Codable, Equatable, Hashable, Identifiable, Sendable {
         self.frequency = frequency
     }
 
+    /// Отклонение от эталона в центах: минус означает ниже ноты, плюс — выше.
+    /// В музыкальном строе одна октава равна 1 200 центам.
     static func cents(from frequency: Double, to reference: Double) -> Double {
         1_200 * log2(frequency / reference)
     }
 }
 
+/// Строй инструмента: упорядоченные струны от самой низкой к самой высокой.
 struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
     let id: String
     let name: String
@@ -28,6 +33,9 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
         strings.map(\.name).joined(separator: " ")
     }
 
+    /// Автоматический режим выбирает струну с минимальным музыкальным отклонением.
+    /// Сравниваем центы, а не разницу в герцах: одинаковый интервал звучит
+    /// по-разному в герцах в низком и высоком регистрах.
     func nearestString(to frequency: Double) -> GuitarString? {
         guard frequency > 0 else { return nil }
         return strings.min {
@@ -36,6 +44,7 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
         }
     }
 
+    /// Ручной выбор закрепляет конкретную струну; без него работает автоопределение.
     func targetString(for frequency: Double, selectedStringID: String?) -> GuitarString? {
         if let selectedStringID,
            let selectedString = strings.first(where: { $0.id == selectedStringID }) {
@@ -44,6 +53,7 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
         return nearestString(to: frequency)
     }
 
+    // Встроенные строи хранят эталонные частоты открытых струн в герцах.
     static let standard = TuningPreset(
         id: "standard",
         name: "Standard",
@@ -105,6 +115,7 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
     private static func makeStrings(
         _ values: [(name: String, octave: Int, frequency: Double)]
     ) -> [GuitarString] {
+        // Индекс сохраняет разные позиции даже там, где две струны дают одну ноту.
         values.enumerated().map { index, value in
             GuitarString(
                 id: "preset-\(index)-\(value.name)-\(value.octave)",
@@ -117,6 +128,8 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
 }
 
 @MainActor
+/// Локальное хранилище пользовательских строев. `@Published` обновляет меню
+/// сразу после сохранения или удаления, а UserDefaults переживает перезапуск.
 final class CustomTuningStore: ObservableObject {
     @Published private(set) var presets: [TuningPreset]
 
@@ -129,6 +142,7 @@ final class CustomTuningStore: ObservableObject {
         presets = Self.load(from: defaults, key: storageKey)
     }
 
+    /// Создаёт новый пресет с постоянным ID и сохраняет весь список на устройстве.
     func save(name: String, strings: [GuitarString]) -> TuningPreset {
         let preset = TuningPreset(
             id: "custom-\(UUID().uuidString)",
@@ -140,16 +154,19 @@ final class CustomTuningStore: ObservableObject {
         return preset
     }
 
+    /// Удаляет только пользовательский пресет и обновляет сохранённый список.
     func delete(_ preset: TuningPreset) {
         presets.removeAll { $0.id == preset.id }
         persist()
     }
 
+    /// Кодируем массив в JSON, потому что UserDefaults не хранит Swift-структуры напрямую.
     private func persist() {
         guard let data = try? JSONEncoder().encode(presets) else { return }
         defaults.set(data, forKey: storageKey)
     }
 
+    /// При первом запуске или нечитаемых данных начинаем с пустого списка.
     private static func load(from defaults: UserDefaults, key: String) -> [TuningPreset] {
         guard let data = defaults.data(forKey: key),
               let presets = try? JSONDecoder().decode([TuningPreset].self, from: data) else {
@@ -159,6 +176,8 @@ final class CustomTuningStore: ObservableObject {
     }
 }
 
+/// Временное состояние строки конструктора: пользователь меняет ноту и октаву,
+/// а готовая `GuitarString` создаётся только при сохранении строя.
 struct CustomStringDraft: Identifiable, Equatable {
     let id: UUID
     var note: String
@@ -171,6 +190,8 @@ struct CustomStringDraft: Identifiable, Equatable {
     }
 
     var guitarString: GuitarString {
+        // MIDI-нумерация даёт простой мост от ноты и октавы к частоте:
+        // A4 = нота 69 = 440 Гц; каждые 12 полутонов удваивают частоту.
         let pitchClass = Self.notes.firstIndex(of: note) ?? 0
         let midiNote = (octave + 1) * 12 + pitchClass
         let frequency = 440 * pow(2, Double(midiNote - 69) / 12)
@@ -182,8 +203,10 @@ struct CustomStringDraft: Identifiable, Equatable {
         )
     }
 
+    /// Порядок здесь важен: индекс ноты соответствует её номеру в октаве MIDI.
     static let notes = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
 
+    /// Начальные значения формы повторяют обычный шестиструнный строй.
     static let standard: [CustomStringDraft] = [
         .init(note: "E", octave: 2), .init(note: "A", octave: 2),
         .init(note: "D", octave: 3), .init(note: "G", octave: 3),
