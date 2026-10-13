@@ -83,8 +83,33 @@ final class PitchDetectorTests: XCTestCase {
         XCTAssertNil(stabilizer.update(with: 110))
         XCTAssertNil(stabilizer.update(with: 110.2))
         XCTAssertEqual(stabilizer.update(with: 109.9), 110)
-        XCTAssertEqual(stabilizer.update(with: 220), 110.2)
-        XCTAssertEqual(stabilizer.update(with: 110.1), 110.1)
+        XCTAssertEqual(stabilizer.update(with: 220), 110)
+        XCTAssertEqual(stabilizer.update(with: 110.1), 110)
+    }
+
+    func testStabilizerKeepsHighEAndBThroughShortOctaveDrops() throws {
+        var stabilizer = PitchStabilizer()
+        for _ in 0..<4 { _ = stabilizer.update(with: 329.1) }
+        for _ in 0..<5 {
+            XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 163.9)), 327.8, accuracy: 1.5)
+        }
+
+        stabilizer.reset()
+        for _ in 0..<4 { _ = stabilizer.update(with: 246.4) }
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 123.5)), 246.4, accuracy: 0.7)
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 246.4)), 246.4, accuracy: 0.7)
+    }
+
+    func testStabilizerStillChangesToAnotherStringAndAcceptsSustainedOctave() throws {
+        var stabilizer = PitchStabilizer()
+        for _ in 0..<3 { _ = stabilizer.update(with: 329.63) }
+        for _ in 0..<3 { _ = stabilizer.update(with: 246.94) }
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 246.94)), 246.94, accuracy: 0.01)
+
+        stabilizer.reset()
+        for _ in 0..<3 { _ = stabilizer.update(with: 329.63) }
+        for _ in 0..<9 { _ = stabilizer.update(with: 164.81) }
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 164.81)), 164.81, accuracy: 0.01)
     }
 
     func testStabilizerChangesStringAndClearsAfterSilence() {

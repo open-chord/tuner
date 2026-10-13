@@ -99,17 +99,40 @@ enum PitchDetector {
 struct PitchStabilizer {
     private var recent: [Double] = []
     private var missedFrames = 0
+    private var octaveMismatchFrames = 0
     private let windowSize = 5
+    private let octaveSwitchFrames = 7
 
     mutating func update(with frequency: Double?) -> Double? {
         guard let frequency, frequency.isFinite, frequency > 0 else {
             missedFrames += 1
+            octaveMismatchFrames = 0
             if missedFrames >= 2 { reset() }
             return recent.count >= 3 ? median : nil
         }
 
         missedFrames = 0
-        recent.append(frequency)
+        var acceptedFrequency = frequency
+        if recent.count >= 3 {
+            let ratio = frequency / median
+            let octaveOffset = 1200 * log2(ratio)
+            // A fading guitar string can briefly look one octave lower or
+            // higher. Keep its established octave while that error is brief,
+            // but still allow a deliberate octave change after sustained input.
+            if abs(octaveOffset - 1200) < 50 ||
+                abs(octaveOffset + 1200) < 50 {
+                octaveMismatchFrames += 1
+                if octaveMismatchFrames < octaveSwitchFrames {
+                    acceptedFrequency = ratio < 1 ? frequency * 2 : frequency / 2
+                } else {
+                    recent.removeAll(keepingCapacity: true)
+                    octaveMismatchFrames = 0
+                }
+            } else {
+                octaveMismatchFrames = 0
+            }
+        }
+        recent.append(acceptedFrequency)
         if recent.count > windowSize { recent.removeFirst() }
         return recent.count >= 3 ? median : nil
     }
@@ -117,6 +140,7 @@ struct PitchStabilizer {
     mutating func reset() {
         recent.removeAll(keepingCapacity: true)
         missedFrames = 0
+        octaveMismatchFrames = 0
     }
 
     private var median: Double {
