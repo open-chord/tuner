@@ -41,6 +41,17 @@ final class PitchDetectorTests: XCTestCase {
         XCTAssertEqual(result, frequency, accuracy: 0.5)
     }
 
+    func testDetectsMinimumSupportedFrequency() throws {
+        let sampleRate = 44_100.0
+        let samples = (0..<4_096).map { index in
+            Float(sin(2 * Double.pi * 55 * Double(index) / sampleRate))
+        }
+        let result = try XCTUnwrap(
+            PitchDetector.estimateFrequency(samples: samples, sampleRate: sampleRate)
+        )
+        XCTAssertEqual(result, 55, accuracy: 0.5)
+    }
+
     func testFadingAStringDoesNotBecomeHalfItsFrequency() throws {
         let sampleRate = 48_000.0
         let samples = (0..<4_096).map { index -> Float in
@@ -69,6 +80,37 @@ final class PitchDetectorTests: XCTestCase {
         XCTAssertEqual(result, 110, accuracy: 0.5)
     }
 
+    func testTracksEveryOpenStringAcrossTimbresAndInputLevels() throws {
+        let frequencies = [65.41, 82.41, 110.0, 146.83, 196.0, 246.94, 329.63]
+        for sampleRate in [44_100.0, 48_000.0] {
+            for frequency in frequencies {
+                for fundamentalWeight in [0.25, 0.7] {
+                    for level in [0.03, 0.2] {
+                        var tracker = PitchTracker()
+                        var output: Double?
+                        for frame in 0..<6 {
+                            let samples = (0..<4_096).map { index -> Float in
+                                let time = Double(frame * 4_096 + index) / sampleRate
+                                let phase = 2 * Double.pi * frequency * time
+                                let string = fundamentalWeight * sin(phase)
+                                    + sin(2 * phase) + 0.4 * sin(3 * phase)
+                                let background = 0.001 * sin(2 * Double.pi * 60 * time)
+                                return Float(level * exp(-1.5 * time) * string + background)
+                            }
+                            output = tracker.update(with: PitchDetector.candidates(
+                                samples: samples, sampleRate: sampleRate
+                            ))
+                        }
+                        XCTAssertEqual(
+                            try XCTUnwrap(output), frequency, accuracy: 1.5,
+                            "\(frequency) Hz at \(sampleRate) Hz, level \(level), fundamental \(fundamentalWeight)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     func testDetectsSustainedClippingButNotOneTransient() {
         var samples = Array(repeating: Float(0.2), count: 4_096)
         samples[0] = 1
@@ -78,47 +120,52 @@ final class PitchDetectorTests: XCTestCase {
         XCTAssertTrue(PitchDetector.isClipping(samples: samples))
     }
 
-    func testStabilizerRejectsAnIsolatedOctaveError() {
-        var stabilizer = PitchStabilizer()
-        XCTAssertNil(stabilizer.update(with: 110))
-        XCTAssertNil(stabilizer.update(with: 110.2))
-        XCTAssertEqual(stabilizer.update(with: 109.9), 110)
-        XCTAssertEqual(stabilizer.update(with: 220), 110)
-        XCTAssertEqual(stabilizer.update(with: 110.1), 110)
+    func testTrackerPrefersEstablishedPitchWhenAnotherCandidateBarelyWins() {
+        var stabilizer = PitchTracker()
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(110)]) }
+        let ambiguous = [candidate(55, error: 0.01), candidate(110, error: 0.02)]
+        for _ in 0..<5 {
+            XCTAssertEqual(stabilizer.update(with: ambiguous), 110)
+        }
     }
 
-    func testStabilizerKeepsHighEAndBThroughShortOctaveDrops() throws {
-        var stabilizer = PitchStabilizer()
-        for _ in 0..<4 { _ = stabilizer.update(with: 329.1) }
+    func testTrackerKeepsHighEAndBThroughOctaveAmbiguity() throws {
+        var stabilizer = PitchTracker()
+        for _ in 0..<4 { _ = stabilizer.update(with: [candidate(329.1)]) }
         for _ in 0..<5 {
-            XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 163.9)), 327.8, accuracy: 1.5)
+            let ambiguous = [candidate(163.9, error: 0.01), candidate(329.1, error: 0.02)]
+            XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: ambiguous)), 329.1, accuracy: 0.1)
         }
 
         stabilizer.reset()
-        for _ in 0..<4 { _ = stabilizer.update(with: 246.4) }
-        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 123.5)), 246.4, accuracy: 0.7)
-        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 246.4)), 246.4, accuracy: 0.7)
+        for _ in 0..<4 { _ = stabilizer.update(with: [candidate(246.4)]) }
+        let ambiguous = [candidate(123.5, error: 0.01), candidate(246.4, error: 0.02)]
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: ambiguous)), 246.4, accuracy: 0.1)
     }
 
-    func testStabilizerStillChangesToAnotherStringAndAcceptsSustainedOctave() throws {
-        var stabilizer = PitchStabilizer()
-        for _ in 0..<3 { _ = stabilizer.update(with: 329.63) }
-        for _ in 0..<3 { _ = stabilizer.update(with: 246.94) }
-        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 246.94)), 246.94, accuracy: 0.01)
+    func testTrackerStillChangesToAnotherStringAndOctave() throws {
+        var stabilizer = PitchTracker()
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(329.63)]) }
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(246.94)]) }
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: [candidate(246.94)])), 246.94, accuracy: 0.01)
 
         stabilizer.reset()
-        for _ in 0..<3 { _ = stabilizer.update(with: 329.63) }
-        for _ in 0..<9 { _ = stabilizer.update(with: 164.81) }
-        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: 164.81)), 164.81, accuracy: 0.01)
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(329.63)]) }
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(164.81)]) }
+        XCTAssertEqual(try XCTUnwrap(stabilizer.update(with: [candidate(164.81)])), 164.81, accuracy: 0.01)
     }
 
-    func testStabilizerChangesStringAndClearsAfterSilence() {
-        var stabilizer = PitchStabilizer()
-        for _ in 0..<3 { _ = stabilizer.update(with: 110) }
-        XCTAssertEqual(stabilizer.update(with: 146.83), 110)
-        XCTAssertEqual(stabilizer.update(with: 146.83), 110)
-        XCTAssertEqual(stabilizer.update(with: 146.83), 146.83)
-        XCTAssertEqual(stabilizer.update(with: nil), 146.83)
-        XCTAssertNil(stabilizer.update(with: nil))
+    func testTrackerChangesStringAndClearsAfterSilence() {
+        var stabilizer = PitchTracker()
+        for _ in 0..<3 { _ = stabilizer.update(with: [candidate(110)]) }
+        XCTAssertEqual(stabilizer.update(with: [candidate(146.83)]), 110)
+        XCTAssertEqual(stabilizer.update(with: [candidate(146.83)]), 110)
+        XCTAssertEqual(stabilizer.update(with: [candidate(146.83)]), 146.83)
+        XCTAssertEqual(stabilizer.update(with: []), 146.83)
+        XCTAssertNil(stabilizer.update(with: []))
+    }
+
+    private func candidate(_ frequency: Double, error: Float = 0.01) -> PitchCandidate {
+        PitchCandidate(frequency: frequency, error: error)
     }
 }

@@ -30,7 +30,7 @@ final class TunerEngine: ObservableObject {
     }
 
     private let audioEngine = AVAudioEngine()
-    private var pitchStabilizer = PitchStabilizer()
+    private var pitchTracker = PitchTracker()
     private var analysisGeneration = UUID()
 
     /// Requests microphone access and analyzes audio in 4,096-sample buffers.
@@ -43,7 +43,7 @@ final class TunerEngine: ObservableObject {
 
         do {
             analysisGeneration = UUID()
-            pitchStabilizer.reset()
+            pitchTracker.reset()
             isInputOverloaded = false
             let generation = analysisGeneration
             let session = AVAudioSession.sharedInstance()
@@ -61,14 +61,14 @@ final class TunerEngine: ObservableObject {
                 guard let channel = buffer.floatChannelData?.pointee else { return }
                 let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
                 let isClipping = PitchDetector.isClipping(samples: samples)
-                let detected = isClipping ? nil : PitchDetector.estimateFrequency(
+                let candidates = isClipping ? [] : PitchDetector.candidates(
                     samples: samples, sampleRate: format.sampleRate
                 )
                 // The audio callback is not on the main actor; UI state is.
                 Task { @MainActor [weak self] in
                     guard let self, self.analysisGeneration == generation,
                           self.state == .listening else { return }
-                    self.processObservation(detected, isClipping: isClipping)
+                    self.processObservation(candidates, isClipping: isClipping)
                 }
             }
 
@@ -91,7 +91,7 @@ final class TunerEngine: ObservableObject {
         guitarString = nil
         cents = 0
         isInputOverloaded = false
-        pitchStabilizer.reset()
+        pitchTracker.reset()
     }
 
     /// `nil` enables AUTO; a specific string locks manual selection.
@@ -100,13 +100,13 @@ final class TunerEngine: ObservableObject {
         update(with: frequency)
     }
 
-    private func processObservation(_ detected: Double?, isClipping: Bool) {
+    private func processObservation(_ candidates: [PitchCandidate], isClipping: Bool) {
         isInputOverloaded = isClipping
         if isClipping {
-            pitchStabilizer.reset()
+            pitchTracker.reset()
             update(with: nil)
         } else {
-            update(with: pitchStabilizer.update(with: detected))
+            update(with: pitchTracker.update(with: candidates))
         }
     }
 

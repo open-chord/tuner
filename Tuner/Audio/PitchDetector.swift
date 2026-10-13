@@ -1,7 +1,15 @@
+import Accelerate
 import Foundation
 
-/// Estimates the fundamental frequency of a short audio sample buffer.
-/// This algorithm is independent of the microphone and the UI.
+/// One plausible fundamental period in an audio frame. Lower error means the
+/// waveform repeats more consistently at this frequency.
+struct PitchCandidate {
+    let frequency: Double
+    let error: Float
+}
+
+/// Finds plausible fundamental frequencies with YIN's cumulative mean
+/// normalized difference function. It is independent of the microphone/UI.
 enum PitchDetector {
     /// A saturated input cannot provide a trustworthy pitch reading. Ignore
     /// a single clipped attack, but reject sustained clipping in a buffer.
@@ -13,126 +21,151 @@ enum PitchDetector {
         return clippedCount * 100 >= samples.count
     }
 
-    /// Returns a frequency in hertz, or `nil` for silence or an unreliable signal.
+    /// Returns several plausible pitches, ordered by periodicity. Keeping
+    /// alternatives lets the tracker resolve octave ambiguity across frames.
+    static func candidates(
+        samples: [Float],
+        sampleRate: Double,
+        minimumFrequency: Double = 55,
+        maximumFrequency: Double = 400
+    ) -> [PitchCandidate] {
+        guard samples.count >= 512, sampleRate > 0,
+              minimumFrequency > 0, maximumFrequency > minimumFrequency else { return [] }
+
+        let mean = samples.reduce(0, +) / Float(samples.count)
+        let centered = samples.map { $0 - mean }
+        let energy = centered.reduce(0) { $0 + $1 * $1 } / Float(centered.count)
+        guard energy > 0.000_01 else { return [] }
+
+        let minimumLag = max(2, Int(sampleRate / maximumFrequency))
+        let maximumLag = min(centered.count / 2, Int(sampleRate / minimumFrequency))
+        guard minimumLag + 1 < maximumLag else { return [] }
+
+        // Every lag uses the same half-frame, so longer periods do not win
+        // merely because fewer samples were compared.
+        let windowSize = centered.count / 2
+        var normalizedDifference = [Float](repeating: 1, count: maximumLag + 1)
+        var runningDifference: Float = 0
+        var squaredPrefix = [Float](repeating: 0, count: centered.count + 1)
+        for index in centered.indices {
+            squaredPrefix[index + 1] = squaredPrefix[index] + centered[index] * centered[index]
+        }
+        let leftEnergy = squaredPrefix[windowSize]
+        centered.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            for lag in 1...maximumLag {
+                var correlation: Float = 0
+                vDSP_dotpr(base, 1, base.advanced(by: lag), 1, &correlation,
+                           vDSP_Length(windowSize))
+                let rightEnergy = squaredPrefix[lag + windowSize] - squaredPrefix[lag]
+                let difference = max(0, leftEnergy + rightEnergy - 2 * correlation)
+                runningDifference += difference
+                normalizedDifference[lag] = runningDifference > 0
+                    ? difference * Float(lag) / runningDifference : 1
+            }
+        }
+
+        var result: [PitchCandidate] = []
+        for lag in minimumLag...maximumLag {
+            let error = normalizedDifference[lag]
+            guard error < 0.15,
+                  (lag == minimumLag || error <= normalizedDifference[lag - 1]),
+                  (lag == maximumLag || error < normalizedDifference[lag + 1]) else { continue }
+
+            // Parabolic interpolation removes integer-lag quantization from
+            // the cents display.
+            let offset: Float
+            if lag > minimumLag && lag < maximumLag {
+                let before = normalizedDifference[lag - 1]
+                let after = normalizedDifference[lag + 1]
+                let curvature = before - 2 * error + after
+                offset = abs(curvature) > 0.000_001
+                    ? min(0.5, max(-0.5, 0.5 * (before - after) / curvature)) : 0
+            } else {
+                offset = 0
+            }
+            result.append(PitchCandidate(
+                frequency: sampleRate / (Double(lag) + Double(offset)),
+                error: error
+            ))
+        }
+        guard !result.isEmpty else { return [] }
+
+        // Difference functions can give a low-error result at a divisor of
+        // the real period. Require each candidate to have some energy at its
+        // own frequency, not only at a louder harmonic above it.
+        let strengths = result.map {
+            spectralMagnitude(samples: centered, frequency: $0.frequency, sampleRate: sampleRate)
+        }
+        let strongest = strengths.max() ?? 0
+        // An almost perfectly repeating fundamental remains credible even
+        // when its second harmonic dominates the spectrum.
+        return result.enumerated().compactMap { index, candidate in
+            strengths[index] >= strongest * 0.2 || candidate.error < 0.000_1
+                ? candidate : nil
+        }.sorted { $0.error < $1.error }
+    }
+
+    /// Goertzel evaluates one spectral frequency without building an FFT.
+    private static func spectralMagnitude(
+        samples: [Float], frequency: Double, sampleRate: Double
+    ) -> Double {
+        let coefficient = 2 * cos(2 * Double.pi * frequency / sampleRate)
+        var previous = 0.0
+        var beforePrevious = 0.0
+        for sample in samples {
+            let current = Double(sample) + coefficient * previous - beforePrevious
+            beforePrevious = previous
+            previous = current
+        }
+        return sqrt(max(0, previous * previous + beforePrevious * beforePrevious
+                        - coefficient * previous * beforePrevious))
+    }
+
+    /// The best single-frame estimate remains useful for isolated core tests.
+    /// Live tuning uses all candidates through `PitchTracker` instead.
     static func estimateFrequency(
         samples: [Float],
         sampleRate: Double,
         minimumFrequency: Double = 55,
         maximumFrequency: Double = 400
     ) -> Double? {
-        guard samples.count >= 512, sampleRate > 0 else { return nil }
-
-        // Remove the DC offset, then reject silence using the signal's energy.
-        let mean = samples.reduce(0, +) / Float(samples.count)
-        let centered = samples.map { $0 - mean }
-        let energy = centered.reduce(0) { $0 + $1 * $1 } / Float(centered.count)
-        guard energy > 0.000_01 else { return nil }
-
-        // Period length = sample rate / frequency. Search only the tuner's
-        // supported frequency range instead of every possible period.
-        let minimumLag = max(2, Int(sampleRate / maximumFrequency))
-        let maximumLag = min(centered.count / 2, Int(sampleRate / minimumFrequency))
-        guard minimumLag < maximumLag else { return nil }
-
-        var bestLag = minimumLag
-        var bestCorrelation: Float = -.infinity
-        var correlations = [Float](repeating: 0, count: maximumLag + 1)
-
-        // Autocorrelation compares the signal with a copy shifted by `lag`.
-        // The strongest match estimates the repeating waveform's period.
-        for lag in minimumLag...maximumLag {
-            var correlation: Float = 0
-            var leftEnergy: Float = 0
-            var rightEnergy: Float = 0
-
-            for index in 0..<(centered.count - lag) {
-                let left = centered[index]
-                let right = centered[index + lag]
-                correlation += left * right
-                leftEnergy += left * left
-                rightEnergy += right * right
-            }
-
-            // Normalize so a louder segment cannot win solely because of its
-            // amplitude; we want to compare waveform shape.
-            let denominator = sqrt(leftEnergy * rightEnergy)
-            let normalized = denominator > 0 ? correlation / denominator : 0
-            correlations[lag] = normalized
-            if normalized > bestCorrelation {
-                bestCorrelation = normalized
-                bestLag = lag
-            }
-        }
-
-        // Treat a weak match as noise rather than a stable musical pitch.
-        guard bestCorrelation > 0.8 else { return nil }
-
-        // A period of two cycles can score slightly higher than the actual
-        // cycle when a quiet subharmonic or room noise is present. Prefer the
-        // earliest strong local peak to avoid reporting half the string pitch.
-        let requiredCorrelation = max(0.8, bestCorrelation - 0.02)
-        if maximumLag - minimumLag >= 2 {
-            for lag in (minimumLag + 1)..<maximumLag {
-                if correlations[lag] >= requiredCorrelation,
-                   correlations[lag] >= correlations[lag - 1],
-                   correlations[lag] > correlations[lag + 1] {
-                    // A loud second harmonic can also make half a cycle look
-                    // plausible. Its full cycle must not be clearly stronger.
-                    let doubledLag = lag * 2
-                    // At the lower search boundary, a little bass noise can
-                    // inflate the two-cycle score; allow more headroom there.
-                    let doubledTolerance: Float = doubledLag >= maximumLag - 2 ? 0.01 : 0.003
-                    if doubledLag <= maximumLag,
-                       correlations[doubledLag] > correlations[lag] + doubledTolerance {
-                        continue
-                    }
-                    return sampleRate / Double(lag)
-                }
-            }
-        }
-        return sampleRate / Double(bestLag)
+        candidates(
+            samples: samples,
+            sampleRate: sampleRate,
+            minimumFrequency: minimumFrequency,
+            maximumFrequency: maximumFrequency
+        ).first?.frequency
     }
 }
 
-/// Keeps one transient frequency error from changing the displayed string.
-/// Three readings are enough to show a pitch; two missed buffers clear it.
-struct PitchStabilizer {
+/// Tracks a pitch through time rather than treating every buffer as a new
+/// string. Continuity only breaks ties among good candidates; a clearly
+/// better new pitch can still take over without a note-specific exception.
+struct PitchTracker {
     private var recent: [Double] = []
     private var missedFrames = 0
-    private var octaveMismatchFrames = 0
     private let windowSize = 5
-    private let octaveSwitchFrames = 7
 
-    mutating func update(with frequency: Double?) -> Double? {
-        guard let frequency, frequency.isFinite, frequency > 0 else {
+    mutating func update(with candidates: [PitchCandidate]) -> Double? {
+        guard let best = candidates.first else {
             missedFrames += 1
-            octaveMismatchFrames = 0
             if missedFrames >= 2 { reset() }
             return recent.count >= 3 ? median : nil
         }
 
         missedFrames = 0
-        var acceptedFrequency = frequency
+        let chosen: PitchCandidate
         if recent.count >= 3 {
-            let ratio = frequency / median
-            let octaveOffset = 1200 * log2(ratio)
-            // A fading guitar string can briefly look one octave lower or
-            // higher. Keep its established octave while that error is brief,
-            // but still allow a deliberate octave change after sustained input.
-            if abs(octaveOffset - 1200) < 50 ||
-                abs(octaveOffset + 1200) < 50 {
-                octaveMismatchFrames += 1
-                if octaveMismatchFrames < octaveSwitchFrames {
-                    acceptedFrequency = ratio < 1 ? frequency * 2 : frequency / 2
-                } else {
-                    recent.removeAll(keepingCapacity: true)
-                    octaveMismatchFrames = 0
-                }
-            } else {
-                octaveMismatchFrames = 0
-            }
+            chosen = candidates.first(where: { candidate in
+                let cents = 1200 * log2(candidate.frequency / median)
+                return abs(cents) < 70 && candidate.error <= best.error + 0.04
+            }) ?? best
+        } else {
+            chosen = best
         }
-        recent.append(acceptedFrequency)
+
+        recent.append(chosen.frequency)
         if recent.count > windowSize { recent.removeFirst() }
         return recent.count >= 3 ? median : nil
     }
@@ -140,7 +173,6 @@ struct PitchStabilizer {
     mutating func reset() {
         recent.removeAll(keepingCapacity: true)
         missedFrames = 0
-        octaveMismatchFrames = 0
     }
 
     private var median: Double {
