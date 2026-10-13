@@ -133,6 +133,7 @@ struct TuningCardView: View {
     // MARK: - Readouts
 
     private var statusText: String {
+        if engine.isInputOverloaded { return "Слишком громко — отодвинь iPhone" }
         // Before the microphone detects a frequency, prompt the next action.
         guard engine.frequency != nil else {
             if let selectedStringID = engine.selectedStringID,
@@ -167,6 +168,7 @@ struct TuningCardView: View {
     }
 
     private var statusColor: Color {
+        if engine.isInputOverloaded { return .orange }
         if isInTune { return .green }
         return .white
     }

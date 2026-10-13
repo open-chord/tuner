@@ -3,6 +3,16 @@ import Foundation
 /// Estimates the fundamental frequency of a short audio sample buffer.
 /// This algorithm is independent of the microphone and the UI.
 enum PitchDetector {
+    /// A saturated input cannot provide a trustworthy pitch reading. Ignore
+    /// a single clipped attack, but reject sustained clipping in a buffer.
+    static func isClipping(samples: [Float]) -> Bool {
+        guard !samples.isEmpty else { return false }
+        let clippedCount = samples.reduce(into: 0) { count, sample in
+            if abs(sample) >= 0.98 { count += 1 }
+        }
+        return clippedCount * 100 >= samples.count
+    }
+
     /// Returns a frequency in hertz, or `nil` for silence or an unreliable signal.
     static func estimateFrequency(
         samples: [Float],
@@ -55,5 +65,36 @@ enum PitchDetector {
         // Treat a weak match as noise rather than a stable musical pitch.
         guard bestCorrelation > 0.75 else { return nil }
         return sampleRate / Double(bestLag)
+    }
+}
+
+/// Keeps one transient frequency error from changing the displayed string.
+/// Three readings are enough to show a pitch; two missed buffers clear it.
+struct PitchStabilizer {
+    private var recent: [Double] = []
+    private var missedFrames = 0
+    private let windowSize = 5
+
+    mutating func update(with frequency: Double?) -> Double? {
+        guard let frequency, frequency.isFinite, frequency > 0 else {
+            missedFrames += 1
+            if missedFrames >= 2 { reset() }
+            return recent.count >= 3 ? median : nil
+        }
+
+        missedFrames = 0
+        recent.append(frequency)
+        if recent.count > windowSize { recent.removeFirst() }
+        return recent.count >= 3 ? median : nil
+    }
+
+    mutating func reset() {
+        recent.removeAll(keepingCapacity: true)
+        missedFrames = 0
+    }
+
+    private var median: Double {
+        let sorted = recent.sorted()
+        return sorted[sorted.count / 2]
     }
 }
