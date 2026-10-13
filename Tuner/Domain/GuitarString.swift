@@ -44,13 +44,18 @@ struct TuningPreset: Codable, Equatable, Hashable, Identifiable, Sendable {
         }
     }
 
-    /// Manual selection locks a string; otherwise use automatic detection.
+    /// Manual selection locks a string. AUTO reports only frequencies close
+    /// enough to a target to plausibly belong to an open string in this tuning.
     func targetString(for frequency: Double, selectedStringID: String?) -> GuitarString? {
         if let selectedStringID,
            let selectedString = strings.first(where: { $0.id == selectedStringID }) {
             return selectedString
         }
-        return nearestString(to: frequency)
+        guard let nearest = nearestString(to: frequency),
+              abs(GuitarString.cents(from: frequency, to: nearest.frequency)) <= 250 else {
+            return nil
+        }
+        return nearest
     }
 
     // Built-in tunings specify the reference frequencies of open strings in hertz.

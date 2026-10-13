@@ -41,6 +41,34 @@ final class PitchDetectorTests: XCTestCase {
         XCTAssertEqual(result, frequency, accuracy: 0.5)
     }
 
+    func testFadingAStringDoesNotBecomeHalfItsFrequency() throws {
+        let sampleRate = 48_000.0
+        let samples = (0..<4_096).map { index -> Float in
+            let time = Double(index) / sampleRate
+            let fadingA = 0.03 * exp(-5 * time) * sin(2 * .pi * 110 * time)
+            let quietSubharmonic = 0.001 * sin(2 * .pi * 55 * time)
+            return Float(fadingA + quietSubharmonic)
+        }
+
+        let result = try XCTUnwrap(
+            PitchDetector.estimateFrequency(samples: samples, sampleRate: sampleRate)
+        )
+        XCTAssertEqual(result, 110, accuracy: 0.5)
+    }
+
+    func testLoudSecondHarmonicDoesNotDoubleDetectedPitch() throws {
+        let sampleRate = 48_000.0
+        let samples = (0..<4_096).map { index -> Float in
+            let phase = 2 * Double.pi * 110 * Double(index) / sampleRate
+            return Float(0.1 * sin(phase) + sin(2 * phase))
+        }
+
+        let result = try XCTUnwrap(
+            PitchDetector.estimateFrequency(samples: samples, sampleRate: sampleRate)
+        )
+        XCTAssertEqual(result, 110, accuracy: 0.5)
+    }
+
     func testDetectsSustainedClippingButNotOneTransient() {
         var samples = Array(repeating: Float(0.2), count: 4_096)
         samples[0] = 1

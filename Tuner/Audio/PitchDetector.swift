@@ -36,6 +36,7 @@ enum PitchDetector {
 
         var bestLag = minimumLag
         var bestCorrelation: Float = -.infinity
+        var correlations = [Float](repeating: 0, count: maximumLag + 1)
 
         // Autocorrelation compares the signal with a copy shifted by `lag`.
         // The strongest match estimates the repeating waveform's period.
@@ -56,6 +57,7 @@ enum PitchDetector {
             // amplitude; we want to compare waveform shape.
             let denominator = sqrt(leftEnergy * rightEnergy)
             let normalized = denominator > 0 ? correlation / denominator : 0
+            correlations[lag] = normalized
             if normalized > bestCorrelation {
                 bestCorrelation = normalized
                 bestLag = lag
@@ -63,7 +65,31 @@ enum PitchDetector {
         }
 
         // Treat a weak match as noise rather than a stable musical pitch.
-        guard bestCorrelation > 0.75 else { return nil }
+        guard bestCorrelation > 0.8 else { return nil }
+
+        // A period of two cycles can score slightly higher than the actual
+        // cycle when a quiet subharmonic or room noise is present. Prefer the
+        // earliest strong local peak to avoid reporting half the string pitch.
+        let requiredCorrelation = max(0.8, bestCorrelation - 0.02)
+        if maximumLag - minimumLag >= 2 {
+            for lag in (minimumLag + 1)..<maximumLag {
+                if correlations[lag] >= requiredCorrelation,
+                   correlations[lag] >= correlations[lag - 1],
+                   correlations[lag] > correlations[lag + 1] {
+                    // A loud second harmonic can also make half a cycle look
+                    // plausible. Its full cycle must not be clearly stronger.
+                    let doubledLag = lag * 2
+                    // At the lower search boundary, a little bass noise can
+                    // inflate the two-cycle score; allow more headroom there.
+                    let doubledTolerance: Float = doubledLag >= maximumLag - 2 ? 0.01 : 0.003
+                    if doubledLag <= maximumLag,
+                       correlations[doubledLag] > correlations[lag] + doubledTolerance {
+                        continue
+                    }
+                    return sampleRate / Double(lag)
+                }
+            }
+        }
         return sampleRate / Double(bestLag)
     }
 }
