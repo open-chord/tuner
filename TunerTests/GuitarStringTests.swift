@@ -1,6 +1,7 @@
 import XCTest
 @testable import Tuner
 
+/// Tests the music model independently of the microphone and UI.
 final class GuitarStringTests: XCTestCase {
     func testFindsNearestStandardString() throws {
         let string = try XCTUnwrap(TuningPreset.standard.nearestString(to: 112))
@@ -41,6 +42,26 @@ final class GuitarStringTests: XCTestCase {
         XCTAssertEqual(target, highE)
     }
 
+    func testAutoDoesNotMistakeFadingAForLowE() throws {
+        let standard = TuningPreset.standard
+        let lowE = try XCTUnwrap(standard.strings.first)
+
+        // The recording shows A2 near 110 Hz followed by 55 Hz. That is an
+        // octave drop, not a plausible open E2 in standard tuning.
+        XCTAssertEqual(standard.targetString(for: 110, selectedStringID: nil)?.name, "A")
+        XCTAssertNil(standard.targetString(for: 55, selectedStringID: nil))
+        // A deliberately selected string remains available for coarse tuning.
+        XCTAssertEqual(standard.targetString(for: 55, selectedStringID: lowE.id), lowE)
+    }
+
+    func testAutoStillRecognizesLowDropCString() throws {
+        let target = try XCTUnwrap(
+            TuningPreset.dropC.targetString(for: 65.41, selectedStringID: nil)
+        )
+        XCTAssertEqual(target.name, "C")
+        XCTAssertEqual(target.octave, 2)
+    }
+
     func testCustomStringCalculatesConcertA() {
         let string = CustomStringDraft(note: "A", octave: 4).guitarString
 
@@ -57,6 +78,7 @@ final class GuitarStringTests: XCTestCase {
 
     @MainActor
     func testCustomTuningPersistsBetweenStoreInstances() throws {
+        // An isolated UserDefaults suite leaves the user's real tunings untouched.
         let suiteName = "CustomTuningStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
